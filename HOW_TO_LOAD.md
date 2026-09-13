@@ -37,6 +37,15 @@ Copy `use-installed-skills/` to `~/.cursor/skills/use-installed-skills/`.
 Copy `rules/use-installed-skills.mdc` to `<repo>/.cursor/rules/`.
 Clone the catalog separately; do not paste it into chat.
 
+## Codex
+
+Copy `use-installed-skills/` to `~/.codex/skills/use-installed-skills/`.
+Put the optional Release `skills_index.json` beside its `SKILL.md`.
+Run `python3 ~/.codex/skills/use-installed-skills/scripts/search.py "paper writing" --limit 5`.
+The script scans installed Codex, Agents, Cursor and Grok roots. It works without
+an index and reports remote-only matches separately. No Cursor `.mdc` rule is
+required for Codex; do not claim all catalog entries are installed.
+
 ## Grok CLI / Grok Build
 
 Copy `use-installed-skills/` to `~/.grok/skills/use-installed-skills/`.
