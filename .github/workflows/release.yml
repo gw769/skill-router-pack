@@ -11,32 +11,42 @@ permissions:
 jobs:
   pack:
     runs-on: ubuntu-latest
-    env:
-      GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
-      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-      GDRIVE_ZIP_FILE_ID: ${{ secrets.GDRIVE_ZIP_FILE_ID }}
     steps:
       - uses: actions/checkout@v4
+      - name: Test local router
+        run: python3 -m unittest discover -s tests -v
 
       - name: Pull skills_index.json from Google Drive
-        if: ${{ env.GDRIVE_CREDENTIALS != '' && env.GDRIVE_FOLDER_ID != '' }}
+        id: drive_pull
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
         run: |
           set -euo pipefail
+          if [ -z "$GDRIVE_CREDENTIALS" ] || [ -z "$GDRIVE_FOLDER_ID" ]; then
+            echo "Drive pull skipped: credentials or folder ID missing."
+            exit 0
+          fi
           sudo apt-get update -qq
           sudo apt-get install -y rclone
-          printf '%s' "$GDRIVE_CREDENTIALS" > /tmp/gdrive.json
+          umask 077
+          credential_file=$(mktemp)
+          trap 'rm -f -- "$credential_file"' EXIT
+          printf '%s' "$GDRIVE_CREDENTIALS" > "$credential_file"
+          unset GDRIVE_CREDENTIALS
           rclone copy :drive:skills_index.json . \
-            --drive-service-account-file /tmp/gdrive.json \
+            --drive-service-account-file "$credential_file" \
             --drive-root-folder-id "$GDRIVE_FOLDER_ID" \
             --drive-scope drive
           test -f skills_index.json
-          rm -f /tmp/gdrive.json
+          python3 -c 'import json; x=json.load(open("skills_index.json")); assert isinstance(x,list) and x, "Expected nonempty index list"'
+          echo "pulled=true" >> "$GITHUB_OUTPUT"
           echo "Pulled skills_index.json from Drive."
 
       - name: Zip pack
         run: |
           mkdir -p dist
-          zip -r dist/skill-router-pack.zip README.md HOW_TO_LOAD.md grok use-installed-skills rules
+          zip -r dist/skill-router-pack.zip README.md HOW_TO_LOAD.md grok use-installed-skills rules -x '*/__pycache__/*' '*.pyc'
           if [ -f skills_index.json ]; then
             zip -u dist/skill-router-pack.zip skills_index.json
           fi
@@ -51,12 +61,23 @@ jobs:
       # file (seeded once) instead of creating a new zip in the shared folder.
       - name: Upload zip to Google Drive
         id: drive_upload
-        if: ${{ env.GDRIVE_CREDENTIALS != '' && env.GDRIVE_ZIP_FILE_ID != '' }}
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+          GDRIVE_ZIP_FILE_ID: ${{ secrets.GDRIVE_ZIP_FILE_ID }}
         run: |
           set -euo pipefail
+          if [ -z "$GDRIVE_CREDENTIALS" ] || [ -z "$GDRIVE_ZIP_FILE_ID" ]; then
+            echo "Drive upload skipped: credentials or target file ID missing."
+            exit 0
+          fi
           python3 -m venv /tmp/gdvenv
           /tmp/gdvenv/bin/pip install -q google-api-python-client google-auth
-          printf '%s' "$GDRIVE_CREDENTIALS" > /tmp/gdrive.json
+          umask 077
+          credential_file=$(mktemp)
+          trap 'rm -f -- "$credential_file"' EXIT
+          printf '%s' "$GDRIVE_CREDENTIALS" > "$credential_file"
+          unset GDRIVE_CREDENTIALS
+          export GDRIVE_CREDENTIAL_FILE="$credential_file"
           /tmp/gdvenv/bin/python <<'PY'
           import os
           from google.oauth2 import service_account
@@ -65,7 +86,7 @@ jobs:
 
           file_id = os.environ["GDRIVE_ZIP_FILE_ID"]
           creds = service_account.Credentials.from_service_account_file(
-              "/tmp/gdrive.json",
+              os.environ["GDRIVE_CREDENTIAL_FILE"],
               scopes=["https://www.googleapis.com/auth/drive"],
           )
           service = build("drive", "v3", credentials=creds, cache_discovery=False)
@@ -82,7 +103,6 @@ jobs:
           ).execute()
           print(f"Updated Drive file {updated['id']} size={updated.get('size')} modified={updated.get('modifiedTime')}")
           PY
-          rm -f /tmp/gdrive.json
           echo "uploaded=true" >> "$GITHUB_OUTPUT"
           echo "Uploaded skill-router-pack.zip to Drive file $GDRIVE_ZIP_FILE_ID"
 
@@ -90,11 +110,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DRIVE_UPLOADED: ${{ steps.drive_upload.outputs.uploaded }}
+          DRIVE_PULLED: ${{ steps.drive_pull.outputs.pulled }}
         run: |
           TAG=v0.1.${{ github.run_number }}
-          if [ "$DRIVE_UPLOADED" = "true" ]; then
-            NOTES="Router pack for grok.com Custom Instructions. Pulled skills_index.json from Drive and uploaded zip to Drive."
-          else
-            NOTES="Router pack for grok.com Custom Instructions. Drive sync skipped (set GDRIVE_CREDENTIALS + GDRIVE_ZIP_FILE_ID secrets to enable)."
-          fi
+          NOTES="Router pack. Drive index pulled: ${DRIVE_PULLED:-false}; existing Drive ZIP updated: ${DRIVE_UPLOADED:-false}."
           gh release create "$TAG" dist/skill-router-pack.zip --title "$TAG" --notes "$NOTES"
