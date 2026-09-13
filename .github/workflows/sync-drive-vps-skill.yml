@@ -1,0 +1,51 @@
+name: sync-drive-vps-skill
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+      GDRIVE_VPS_SKILL_FILE_ID: 1NSfAVVSJ81Am5B1SlZRf9oNkugQyoBUI
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update VPS-SKILL.md on Google Drive
+        if: ${{ env.GDRIVE_CREDENTIALS != '' }}
+        run: |
+          set -euo pipefail
+          test -f ci/VPS-SKILL.md
+          python3 -m venv /tmp/gdvenv
+          /tmp/gdvenv/bin/pip install -q google-api-python-client google-auth
+          printf '%s' "$GDRIVE_CREDENTIALS" > /tmp/gdrive.json
+          /tmp/gdvenv/bin/python <<'PY'
+          import os
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          file_id = os.environ["GDRIVE_VPS_SKILL_FILE_ID"]
+          creds = service_account.Credentials.from_service_account_file(
+              "/tmp/gdrive.json",
+              scopes=["https://www.googleapis.com/auth/drive"],
+          )
+          service = build("drive", "v3", credentials=creds, cache_discovery=False)
+          media = MediaFileUpload(
+              "ci/VPS-SKILL.md",
+              mimetype="text/markdown",
+              resumable=True,
+          )
+          updated = service.files().update(
+              fileId=file_id,
+              media_body=media,
+              fields="id,name,size,modifiedTime",
+              supportsAllDrives=True,
+          ).execute()
+          print(f"Updated Drive file {updated['id']} name={updated.get('name')} size={updated.get('size')} modified={updated.get('modifiedTime')}")
+          PY
+          rm -f /tmp/gdrive.json
