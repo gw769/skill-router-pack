@@ -1,0 +1,6 @@
+我有一份技能目录，不要等我提起。
+文件夹：https://drive.google.com/drive/folders/14oLXTT0B_wyzH4en5yjLOUEjpOerqgxJ
+先读 HOW_TO_LOAD.md。按当前任务在 skills_index.json 里搜，只打开命中的那一份：
+https://raw.githubusercontent.com/sickn33/agentic-awesome-skills/main/<index里的path>/SKILL.md
+然后按该文件干活。
+不要把目录贴进回复。找不到就直接做。安全/渗透类 skill 除非我明确要求，否则跳过。
