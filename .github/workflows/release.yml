@@ -14,6 +14,7 @@ jobs:
     env:
       GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      GDRIVE_ZIP_FILE_ID: ${{ secrets.GDRIVE_ZIP_FILE_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,20 +47,44 @@ jobs:
           name: skill-router-pack
           path: dist/skill-router-pack.zip
 
+      # Service accounts have no My Drive quota, so CI must UPDATE a user-owned
+      # file (seeded once) instead of creating a new zip in the shared folder.
       - name: Upload zip to Google Drive
         id: drive_upload
-        if: ${{ env.GDRIVE_CREDENTIALS != '' && env.GDRIVE_FOLDER_ID != '' }}
+        if: ${{ env.GDRIVE_CREDENTIALS != '' && env.GDRIVE_ZIP_FILE_ID != '' }}
         run: |
           set -euo pipefail
-          command -v rclone >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y rclone; }
+          python3 -m venv /tmp/gdvenv
+          /tmp/gdvenv/bin/pip install -q google-api-python-client google-auth
           printf '%s' "$GDRIVE_CREDENTIALS" > /tmp/gdrive.json
-          rclone copy dist/skill-router-pack.zip :drive: \
-            --drive-service-account-file /tmp/gdrive.json \
-            --drive-root-folder-id "$GDRIVE_FOLDER_ID" \
-            --drive-scope drive
+          /tmp/gdvenv/bin/python <<'PY'
+          import os
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          file_id = os.environ["GDRIVE_ZIP_FILE_ID"]
+          creds = service_account.Credentials.from_service_account_file(
+              "/tmp/gdrive.json",
+              scopes=["https://www.googleapis.com/auth/drive"],
+          )
+          service = build("drive", "v3", credentials=creds, cache_discovery=False)
+          media = MediaFileUpload(
+              "dist/skill-router-pack.zip",
+              mimetype="application/zip",
+              resumable=True,
+          )
+          updated = service.files().update(
+              fileId=file_id,
+              media_body=media,
+              fields="id,name,size,modifiedTime",
+              supportsAllDrives=True,
+          ).execute()
+          print(f"Updated Drive file {updated['id']} size={updated.get('size')} modified={updated.get('modifiedTime')}")
+          PY
           rm -f /tmp/gdrive.json
           echo "uploaded=true" >> "$GITHUB_OUTPUT"
-          echo "Uploaded skill-router-pack.zip to Drive folder $GDRIVE_FOLDER_ID"
+          echo "Uploaded skill-router-pack.zip to Drive file $GDRIVE_ZIP_FILE_ID"
 
       - name: Create release
         env:
@@ -70,6 +95,6 @@ jobs:
           if [ "$DRIVE_UPLOADED" = "true" ]; then
             NOTES="Router pack for grok.com Custom Instructions. Pulled skills_index.json from Drive and uploaded zip to Drive."
           else
-            NOTES="Router pack for grok.com Custom Instructions. Drive sync skipped (set GDRIVE_CREDENTIALS + GDRIVE_FOLDER_ID secrets to enable)."
+            NOTES="Router pack for grok.com Custom Instructions. Drive sync skipped (set GDRIVE_CREDENTIALS + GDRIVE_ZIP_FILE_ID secrets to enable)."
           fi
           gh release create "$TAG" dist/skill-router-pack.zip --title "$TAG" --notes "$NOTES"
