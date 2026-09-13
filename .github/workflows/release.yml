@@ -13,18 +13,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pull skills_index.json from Google Drive
+        if: ${{ secrets.GDRIVE_CREDENTIALS != '' && secrets.GDRIVE_FOLDER_ID != '' }}
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y rclone
+          printf '%s' "$GDRIVE_CREDENTIALS" > /tmp/gdrive.json
+          rclone copy :drive:skills_index.json . \
+            --drive-service-account-file /tmp/gdrive.json \
+            --drive-root-folder-id "$GDRIVE_FOLDER_ID" \
+            --drive-scope drive
+          test -f skills_index.json
+          rm -f /tmp/gdrive.json
+          echo "Pulled skills_index.json from Drive."
+
       - name: Zip pack
         run: |
           mkdir -p dist
           zip -r dist/skill-router-pack.zip README.md HOW_TO_LOAD.md grok use-installed-skills rules
+          if [ -f skills_index.json ]; then
+            zip -u dist/skill-router-pack.zip skills_index.json
+          fi
+
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: skill-router-pack
           path: dist/skill-router-pack.zip
+
+      - name: Upload zip to Google Drive
+        id: drive_upload
+        if: ${{ secrets.GDRIVE_CREDENTIALS != '' && secrets.GDRIVE_FOLDER_ID != '' }}
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          command -v rclone >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y rclone; }
+          printf '%s' "$GDRIVE_CREDENTIALS" > /tmp/gdrive.json
+          rclone copy dist/skill-router-pack.zip :drive: \
+            --drive-service-account-file /tmp/gdrive.json \
+            --drive-root-folder-id "$GDRIVE_FOLDER_ID" \
+            --drive-scope drive
+          rm -f /tmp/gdrive.json
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          echo "Uploaded skill-router-pack.zip to Drive folder $GDRIVE_FOLDER_ID"
+
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRIVE_UPLOADED: ${{ steps.drive_upload.outputs.uploaded }}
         run: |
           TAG=v0.1.${{ github.run_number }}
-          gh release create "$TAG" dist/skill-router-pack.zip --title "$TAG" --notes "Router pack for grok.com Custom Instructions. No Drive upload."
+          if [ "$DRIVE_UPLOADED" = "true" ]; then
+            NOTES="Router pack for grok.com Custom Instructions. Pulled skills_index.json from Drive and uploaded zip to Drive."
+          else
+            NOTES="Router pack for grok.com Custom Instructions. Drive sync skipped (set GDRIVE_CREDENTIALS + GDRIVE_FOLDER_ID secrets to enable)."
+          fi
+          gh release create "$TAG" dist/skill-router-pack.zip --title "$TAG" --notes "$NOTES"
