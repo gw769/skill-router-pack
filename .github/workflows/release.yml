@@ -11,14 +11,14 @@ permissions:
 jobs:
   pack:
     runs-on: ubuntu-latest
+    env:
+      GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Pull skills_index.json from Google Drive
-        if: ${{ secrets.GDRIVE_CREDENTIALS != '' && secrets.GDRIVE_FOLDER_ID != '' }}
-        env:
-          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
-          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        if: ${{ env.GDRIVE_CREDENTIALS != '' && env.GDRIVE_FOLDER_ID != '' }}
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -48,10 +48,7 @@ jobs:
 
       - name: Upload zip to Google Drive
         id: drive_upload
-        if: ${{ secrets.GDRIVE_CREDENTIALS != '' && secrets.GDRIVE_FOLDER_ID != '' }}
-        env:
-          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
-          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        if: ${{ env.GDRIVE_CREDENTIALS != '' && env.GDRIVE_FOLDER_ID != '' }}
         run: |
           set -euo pipefail
           command -v rclone >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y rclone; }
