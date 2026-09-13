@@ -1,0 +1,51 @@
+name: release-pack
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zip pack
+        run: |
+          mkdir -p dist site
+          zip -r dist/skill-router-pack.zip README.md HOW_TO_LOAD.md grok use-installed-skills rules
+          cp README.md HOW_TO_LOAD.md site/
+          cp -r grok use-installed-skills rules site/
+          printf '%s\n' '<!doctype html><meta charset=utf-8><title>skill-router-pack</title><h1>skill-router-pack</h1><ul><li><a href="HOW_TO_LOAD.md">HOW_TO_LOAD.md</a></li><li><a href="grok/CUSTOM_INSTRUCTIONS.txt">CUSTOM_INSTRUCTIONS.txt</a></li><li><a href="use-installed-skills/SKILL.md">SKILL.md</a></li><li><a href="https://github.com/gw769/skill-router-pack">source</a></li></ul>' > site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-router-pack
+          path: dist/skill-router-pack.zip
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=v0.1.${{ github.run_number }}
+          gh release create "$TAG" dist/skill-router-pack.zip --title "$TAG" --notes "Router pack. Paste grok/CUSTOM_INSTRUCTIONS.txt into grok.com Custom Instructions. Does not upload to Google Drive."
+  pages:
+    needs: pack
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
