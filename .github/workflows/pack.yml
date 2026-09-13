@@ -1,0 +1,40 @@
+name: pack
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zip
+        run: |
+          mkdir -p dist
+          zip -r dist/skill-router-pack.zip HOW_TO_LOAD.md README.md grok use-installed-skills rules
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-router-pack
+          path: dist/skill-router-pack.zip
+
+      - name: Drive upload if secret exists
+        if: ${{ secrets.GDRIVE_SA_JSON != '' }}
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+          FOLDER_ID: 14oLXTT0B_wyzH4en5yjLOUEjpOerqgxJ
+        run: |
+          echo "$GDRIVE_SA_JSON" > sa.json
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+          rclone config create gdrive drive service_account_file sa.json scope drive --non-interactive
+          rclone copy HOW_TO_LOAD.md gdrive: --drive-root-folder-id "$FOLDER_ID"
+          rclone copy use-installed-skills gdrive:use-installed-skills --drive-root-folder-id "$FOLDER_ID"
+          rclone copy grok gdrive:grok --drive-root-folder-id "$FOLDER_ID"
+          rclone copy rules gdrive:rules --drive-root-folder-id "$FOLDER_ID"
