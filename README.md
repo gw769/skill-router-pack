@@ -1,8 +1,9 @@
 # skill-router-pack
 
-One router + an index. Not 2121 skills dumped into a prompt.
+One router + an index. Not ~2760 skills dumped into a prompt.
 
-- Catalog: [sickn33/agentic-awesome-skills](https://github.com/sickn33/agentic-awesome-skills)
+- Catalog: [sickn33/agentic-awesome-skills](https://github.com/sickn33/agentic-awesome-skills) v18.8.0 (2476 skills) + 284 extra skills from other reputable repos = 2760 index entries
+- Index: [`skills_index.json`](skills_index.json) in this repo (same file as on Drive). Extra entries carry `external: true`, `source_repo` and a full `raw_url`
 - Drive index folder: https://drive.google.com/drive/folders/14oLXTT0B_wyzH4en5yjLOUEjpOerqgxJ
 - CI zip: GitHub → Actions → latest run artifacts / Releases
 

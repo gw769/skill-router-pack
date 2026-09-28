@@ -1,5 +1,5 @@
 ---
-description: Search and load the local 2121-skill catalog in this chat
+description: Search and load the local ~2760-skill catalog in this chat
 alwaysApply: true
 ---
 
@@ -7,6 +7,6 @@ alwaysApply: true
 
 On specialized work (review, debug, test, UI, git, papers, security, docs, deploy) or "how do I…":
 search the Drive index https://drive.google.com/drive/folders/14oLXTT0B_wyzH4en5yjLOUEjpOerqgxJ
-or run the local search.py, then Read one SKILL.md from
-https://github.com/sickn33/agentic-awesome-skills
+or run the local search.py, then Read one SKILL.md via the entry's raw_url
+(regular entries live in https://github.com/sickn33/agentic-awesome-skills; extra entries name their repo in source_repo)
 Skip tiny edits. Catalog risk: critical is not a veto unless the skill is offensive/pentest.
